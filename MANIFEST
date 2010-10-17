@@ -1,9 +1,23 @@
 Changes
-Makefile.PL
+LICENSE
 MANIFEST
+MANIFEST.SKIP
+META.yml
+Makefile.PL
 README
-t/01-use.t
-t/02-get.t
+debian/changelog
+debian/compat
+debian/control
+debian/copyright
+debian/rules
+dist.ini
 lib/Net/Pachube.pm
 lib/Net/Pachube/Feed.pm
-META.yml                                 Module meta-data (added by MakeMaker)
+t/01-use.t
+t/02-get.t
+t/author-critic.t
+t/release-eol.t
+t/release-kwalitee.t
+t/release-no-tabs.t
+t/release-pod-coverage.t
+t/release-pod-syntax.t

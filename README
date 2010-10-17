@@ -1,34 +1,13 @@
-Net-Pachube version 0.01
-========================
 
-This module provides a simple API for manipulating feeds on the
-Pachube service (http://www.pachube.com/).  Currently it supports
-updating a feed, fetching the current state of a feed, creating
-a new feed and deleting an existing feed.
 
-INSTALLATION
+This archive contains the distribution Net-Pachube,
+version 1.102900:
 
-To install this module type the following:
+  Perl extension for accessing pachube.com
 
-   perl Makefile.PL
-   make
-   make test
-   make install
+This software is copyright (c) 2010 by Mark Hindess.
 
-DEPENDENCIES
-
-This module requires these other modules and libraries:
-
-  LWP
-  XML::Simple
-  Class::Accessor::Fast
-
-COPYRIGHT AND LICENCE
-
-Copyright (C) 2009 by Mark Hindess
-
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.10.0 or,
-at your option, any later version of Perl 5 you may have available.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 

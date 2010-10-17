@@ -1,8 +1,103 @@
+use strict;
+use warnings;
 package Net::Pachube;
+BEGIN {
+  $Net::Pachube::VERSION = '1.102900';
+}
+
+# ABSTRACT: Perl extension for accessing pachube.com
+
+
+use 5.006;
+use base qw/Class::Accessor::Fast/;
+use Carp;
+use LWP::UserAgent;
+use HTTP::Request;
+use XML::Simple;
+use Net::Pachube::Feed;
+
+__PACKAGE__->mk_accessors(qw/key url user_agent/);
+__PACKAGE__->mk_ro_accessors(qw/http_response/);
+
+
+sub new {
+  my $pkg = shift;
+  $pkg->SUPER::new({ url => 'http://www.pachube.com/api',
+                   user_agent => LWP::UserAgent->new(),
+                   key => $ENV{PACHUBE_API_KEY},
+                   @_ });
+}
+
+
+sub feed {
+  my ($self, $feed_id, $fetch) = @_;
+  $fetch = 1 unless (defined $fetch);
+  Net::Pachube::Feed->new(id => $feed_id, pachube => $self, fetch => $fetch);
+}
+
+
+sub create {
+  my $self = shift;
+  my %p = @_;
+  exists $p{title} or croak "New feed should have a 'title' attribute.\n";
+  my $xml = q{<?xml version="1.0" encoding="UTF-8"?>
+<eeml xmlns="http://www.eeml.org/xsd/005"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.eeml.org/xsd/005 http://www.eeml.org/xsd/005/005.xsd" version="5">
+};
+  my %args =
+    (
+     title => [ $p{title} ],
+    );
+  foreach (qw/description icon website email/) {
+    $args{$_} = [$p{$_}] if (exists $p{$_});
+  }
+  my %location = ();
+  foreach (qw/exposure domain disposition/) {
+    $location{$_} = $p{$_} if (exists $p{$_});
+  }
+  foreach (qw/lat lon ele/) {
+    $location{$_} = [$p{$_}] if (exists $p{$_});
+  }
+  $location{name} = [$p{location_name}] if (exists $p{location_name});
+  $args{location} = \%location if (scalar keys %location);
+  $xml .= XMLout(\%args, RootName => "environment");
+  $xml .= "</eeml>\n";
+  my $resp = $self->_request(method => 'POST', url => $self->url.'.xml',
+                             content => $xml) or return;
+  my $url = $resp->header('Location') or return;
+  return unless ($url =~ m!/(\d+)\.xml$!);
+  $self->feed($1);
+}
+
+sub _request {
+  my $self = shift;
+  my $key = $self->key or
+    croak(q{No pachube api key defined.
+Set PACHUBE_API_KEY environment variable or pass 'key' parameter to the
+constructor.
+});
+  my %p = @_;
+  my $ua = $self->user_agent;
+  $ua->default_header('X-PachubeApiKey' => $key);
+  my $request = HTTP::Request->new($p{method} => $p{url});
+  $request->content($p{content}) if (exists $p{content});
+  my $resp = $self->{http_response} = $ua->request($request);
+  $resp->is_success && $resp;
+}
+
+1;
+
+
+=pod
 
 =head1 NAME
 
 Net::Pachube - Perl extension for accessing pachube.com
+
+=head1 VERSION
+
+version 1.102900
 
 =head1 SYNOPSIS
 
@@ -28,24 +123,24 @@ Net::Pachube - Perl extension for accessing pachube.com
 This module provides a simple API to fetch and/or update pachube.com
 feeds.
 
+=head1 ATTRIBUTES
+
+=head2 C<key( [$new_key] )>
+
+This method is an accessor/setter for the C<key> attribute which is
+the Pachube API key to use.
+
+=head2 C<url( [$new_url] )>
+
+This method is an accessor/setter for the C<url> attribute
+which is the base URL to use for all HTTP requests.
+
+=head2 C<user_agent( [$new_user_agent] )>
+
+This method is an accessor/setter for the C<user_agent> attribute
+which is the L<LWP> user agent object to use for all HTTP requests.
+
 =head1 METHODS
-
-=cut
-
-use 5.006;
-use strict;
-use warnings;
-use base qw/Class::Accessor::Fast/;
-use Carp;
-use LWP::UserAgent;
-use HTTP::Request;
-use XML::Simple;
-use Net::Pachube::Feed;
-
-our $VERSION = '0.01';
-
-__PACKAGE__->mk_accessors(qw/key url user_agent/);
-__PACKAGE__->mk_ro_accessors(qw/http_response/);
 
 =head2 C<new( %parameters )>
 
@@ -73,43 +168,10 @@ are:
 
 =back
 
-=cut
-
-sub new {
-  my $pkg = shift;
-  $pkg->SUPER::new({ url => 'http://www.pachube.com/api',
-                   user_agent => LWP::UserAgent->new(),
-                   key => $ENV{PACHUBE_API_KEY},
-                   @_ });
-}
-
-=head2 C<key( [$new_key] )>
-
-This method is an accessor/setter for the C<key> attribute which is
-the Pachube API key to use.
-
-=head2 C<url( [$new_url] )>
-
-This method is an accessor/setter for the C<url> attribute
-which is the base URL to to use for all HTTP requests.
-
-=head2 C<user_agent( [$new_user_agent] )>
-
-This method is an accessor/setter for the C<user_agent> attribute
-which is the L<LWP> user agent object to use for all HTTP requests.
-
 =head2 C<feed( $feed_id )>
 
 This method constructs a new L<Net::Pachube::Feed> object and retrieves
 the feed data from the server.
-
-=cut
-
-sub feed {
-  my ($self, $feed_id, $fetch) = @_;
-  $fetch = 1 unless (defined $fetch);
-  Net::Pachube::Feed->new(id => $feed_id, pachube => $self, fetch => $fetch);
-}
 
 =head2 C<create( %parameters )>
 
@@ -172,79 +234,23 @@ hash passed to this method:
 
 =back
 
-=cut
-
-sub create {
-  my $self = shift;
-  my %p = @_;
-  exists $p{title} or croak "New feed should have a 'title' attribute.\n";
-  my $xml = q{<?xml version="1.0" encoding="UTF-8"?>
-<eeml xmlns="http://www.eeml.org/xsd/005"
- xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
- xsi:schemaLocation="http://www.eeml.org/xsd/005 http://www.eeml.org/xsd/005/005.xsd" version="5">
-};
-  my %args =
-    (
-     title => [ $p{title} ],
-    );
-  foreach (qw/description icon website email/) {
-    $args{$_} = [$p{$_}] if (exists $p{$_});
-  }
-  my %location = ();
-  foreach (qw/exposure domain disposition/) {
-    $location{$_} = $p{$_} if (exists $p{$_});
-  }
-  foreach (qw/lat lon ele/) {
-    $location{$_} = [$p{$_}] if (exists $p{$_});
-  }
-  $location{name} = [$p{location_name}] if (exists $p{location_name});
-  $args{location} = \%location if (scalar keys %location);
-  $xml .= XMLout(\%args, RootName => "environment");
-  $xml .= "</eeml>\n";
-  my $resp = $self->_request(method => 'POST', url => $self->url.'.xml',
-                             content => $xml) or return;
-  my $url = $resp->header('Location') or return;
-  return unless ($url =~ m!/(\d+)\.xml$!);
-  $self->feed($1);
-}
-
-sub _request {
-  my $self = shift;
-  my $key = $self->key or
-    croak(q{No pachube api key defined.
-Set PACHUBE_API_KEY environment variable or pass 'key' parameter to the
-constructor.
-});
-  my %p = @_;
-  my $ua = $self->user_agent;
-  $ua->default_header('X-PachubeApiKey' => $key);
-  my $request = HTTP::Request->new($p{method} => $p{url});
-  $request->content($p{content}) if (exists $p{content});
-  my $resp = $self->{http_response} = $ua->request($request);
-  $resp->is_success && $resp;
-}
-
-1;
-__END__
-
-=head2 EXPORT
-
-None by default.
-
 =head1 SEE ALSO
 
 Pachube web site: http://www.pachube.com/
 
 =head1 AUTHOR
 
-Mark Hindess, E<lt>soft-pachube@temporalanomaly.comE<gt>
+Mark Hindess <soft-pachube@temporalanomaly.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2009 by Mark Hindess
+This software is copyright (c) 2010 by Mark Hindess.
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.10.0 or,
-at your option, any later version of Perl 5 you may have available.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =cut
+
+
+__END__
+

@@ -1,8 +1,135 @@
+use strict;
+use warnings;
 package Net::Pachube::Feed;
+BEGIN {
+  $Net::Pachube::Feed::VERSION = '1.102900';
+}
+
+# ABSTRACT: Perl extension for manipulating pachube.com feeds
+
+
+use 5.006;
+use base qw/Class::Accessor::Fast/;
+use Carp;
+use XML::Simple;
+
+__PACKAGE__->mk_accessors(qw/id pachube eeml/);
+
+
+sub new {
+  my $pkg = shift;
+  my %p = @_;
+  my $self = $pkg->SUPER::new(\%p);
+  $p{fetch} ? $self->get() : $self;
+}
+
+
+sub get {
+  my ($self) = @_;
+  my $pachube = $self->pachube;
+  my $url = $pachube->url.'/'.$self->id.'.xml';
+  my $resp = $pachube->_request(method => 'GET', url => $url) or return;
+  $self->{eeml} = $resp->content;
+  $self->{_hash} = XMLin($self->{eeml},
+                         KeyAttr => [qw/id/],
+                         ForceArray => [qw/data/]);
+  return $self;
+}
+
+
+sub title {
+  $_[0]->{_hash}->{environment}->{title};
+}
+
+
+sub description {
+  $_[0]->{_hash}->{environment}->{description};
+}
+
+
+sub feed_id {
+  $_[0]->{_hash}->{environment}->{id};
+}
+
+
+sub status {
+  $_[0]->{_hash}->{environment}->{status};
+}
+
+
+sub feed_url {
+  $_[0]->{_hash}->{environment}->{feed};
+}
+
+
+sub creator {
+  $_[0]->{_hash}->{environment}->{creator};
+}
+
+
+sub location {
+  defined $_[1] ? $_[0]->{_hash}->{environment}->{location}->{$_[1]} :
+    $_[0]->{_hash}->{environment}->{location};
+}
+
+
+sub number_of_streams {
+  scalar keys %{$_[0]->{_hash}->{environment}->{data}}
+}
+
+
+sub data_value {
+  $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{value}->{content};
+}
+
+
+sub data_min {
+  $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{value}->{minValue};
+}
+
+
+sub data_max {
+  $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{value}->{maxValue};
+}
+
+
+sub data_tags {
+  my $tags = $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{tag} or return;
+  ref $tags ? @$tags : $tags
+}
+
+
+sub update {
+  my ($self) = shift;
+  my %p = @_;
+  my $pachube = $self->pachube;
+  my $url = $pachube->url.'/'.$self->id;
+  my $data = ref $p{data} ? $p{data} : [$p{data}];
+  $pachube->_request(method => 'PUT', url => $url.'.csv',
+                     content => (join ',', @$data));
+}
+
+
+sub delete {
+  my $self = shift;
+  my $pachube = $self->pachube;
+  my $url = $pachube->url.'/'.$self->id;
+  delete $self->{eeml};
+  $pachube->_request(method => 'DELETE', url => $url);
+}
+
+1;
+
+
+=pod
 
 =head1 NAME
 
 Net::Pachube::Feed - Perl extension for manipulating pachube.com feeds
+
+=head1 VERSION
+
+version 1.102900
 
 =head1 SYNOPSIS
 
@@ -31,19 +158,6 @@ This module encapsulates a www.pachube.com feed.
 
 =head1 METHODS
 
-=cut
-
-use 5.006;
-use strict;
-use warnings;
-use base qw/Class::Accessor::Fast/;
-use Carp;
-use XML::Simple;
-
-our $VERSION = '0.01';
-
-__PACKAGE__->mk_accessors(qw/id pachube eeml/);
-
 =head2 C<new( %parameters )>
 
 The constructor creates a new L<Net:Pachube::Feed> object.  This
@@ -63,34 +177,11 @@ parameters in the hash are:
 
 =back
 
-=cut
-
-sub new {
-  my $pkg = shift;
-  my %p = @_;
-  my $self = $pkg->SUPER::new(\%p);
-  $p{fetch} ? $self->get() : $self;
-}
-
 =head2 C<get( )>
 
 This method refreshes the contents of the feed by sending a C<GET>
 request to the server.  It is automatically called when the feed
 is created but may be called again to refresh the feed data.
-
-=cut
-
-sub get {
-  my ($self) = @_;
-  my $pachube = $self->pachube;
-  my $url = $pachube->url.'/'.$self->id.'.xml';
-  my $resp = $pachube->_request(method => 'GET', url => $url) or return;
-  $self->{eeml} = $resp->content;
-  $self->{_hash} = XMLin($self->{eeml},
-                         KeyAttr => [qw/id/],
-                         ForceArray => [qw/data/]);
-  return $self;
-}
 
 =head2 C<eeml( )>
 
@@ -101,67 +192,31 @@ This method returns the L<EEML> of the feed.
 This method returns the title of the feed from the L<EEML> if the
 request was successful.
 
-=cut
-
-sub title {
-  $_[0]->{_hash}->{environment}->{title};
-}
-
 =head2 C<description( )>
 
 This method returns the description of the feed from the L<EEML> if the
 request was successful.
 
-=cut
-
-sub description {
-  $_[0]->{_hash}->{environment}->{description};
-}
-
 =head2 C<feed_id( )>
 
 This method returns the id of the feed from the L<EEML> if the request
-was successful.  It should always be equal to C<$self->id> which is
+was successful.  It should always be equal to C<< $self->id >> which is
 used to request the feed data.
-
-=cut
-
-sub feed_id {
-  $_[0]->{_hash}->{environment}->{id};
-}
 
 =head2 C<status( )>
 
 This method returns the status of the feed from the L<EEML> if the request
 was successful.
 
-=cut
-
-sub status {
-  $_[0]->{_hash}->{environment}->{status};
-}
-
 =head2 C<feed_url( )>
 
 This method returns the URL for the feed from the L<EEML> if the
 request was successful.
 
-=cut
-
-sub feed_url {
-  $_[0]->{_hash}->{environment}->{feed};
-}
-
 =head2 C<creator( )>
 
 This method returns the creator value from the L<EEML> if the request
 was successful.
-
-=cut
-
-sub creator {
-  $_[0]->{_hash}->{environment}->{creator};
-}
 
 =head2 C<location( [ $key ] )>
 
@@ -171,34 +226,15 @@ supplied then a hash reference will be returned.  If the optional
 C<key> parameter is supplied then the value for that key from the hash
 is returned.
 
-=cut
-
-sub location {
-  defined $_[1] ? $_[0]->{_hash}->{environment}->{location}->{$_[1]} :
-    $_[0]->{_hash}->{environment}->{location};
-}
-
 =head2 C<number_of_streams( )>
 
 This method returns the number of data streams present in the feed.
-
-=cut
-
-sub number_of_streams {
-  scalar keys %{$_[0]->{_hash}->{environment}->{data}}
-}
 
 =head2 C<data_value( [ $index ] )>
 
 This method returns the value from the data stream from the L<EEML>
 if the request was successful.  If the optional zero-based C<index>
 parameter is not provided, it is assumed to be zero.
-
-=cut
-
-sub data_value {
-  $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{value}->{content};
-}
 
 =head2 C<data_min( [ $index ] )>
 
@@ -207,24 +243,12 @@ L<EEML> if the request was successful.  It may be undefined.  If the
 optional zero-based C<index> parameter is not provided, it is assumed
 to be zero.
 
-=cut
-
-sub data_min {
-  $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{value}->{minValue};
-}
-
 =head2 C<data_max( [ $index ] )>
 
 This method returns the maximum value for the data stream from the
 L<EEML> if the request was successful.  It may be undefined.  If the
 optional zero-based C<index> parameter is not provided, it is assumed
 to be zero.
-
-=cut
-
-sub data_max {
-  $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{value}->{maxValue};
-}
 
 =head2 C<data_tags( [ $index ] )>
 
@@ -233,28 +257,10 @@ if the request was successful.  It may be undefined or a list of tags.
 If the optional zero-based C<index> parameter is not provided, it is
 assumed to be zero.
 
-=cut
-
-sub data_tags {
-  my $tags = $_[0]->{_hash}->{environment}->{data}->{$_[1]||0}->{tag} or return;
-  ref $tags ? @$tags : $tags
-}
-
-=head2 C<update( data => \@data_values )>
+=head2 C<<update( data => \@data_values )>>
 
 This method performs a C<PUT> request in order to update a feed.
 It returns true on success or undef otherwise.
-=cut
-
-sub update {
-  my ($self) = shift;
-  my %p = @_;
-  my $pachube = $self->pachube;
-  my $url = $pachube->url.'/'.$self->id;
-  my $data = ref $p{data} ? $p{data} : [$p{data}];
-  $pachube->_request(method => 'PUT', url => $url.'.csv',
-                     content => (join ',', @$data));
-}
 
 =head2 C<delete( )>
 
@@ -262,37 +268,23 @@ This method sends a C<DELETE> request to the server to remove
 it from the server.  It returns true if successful or undef
 otherwise.
 
-=cut
-
-sub delete {
-  my $self = shift;
-  my $pachube = $self->pachube;
-  my $url = $pachube->url.'/'.$self->id;
-  delete $self->{eeml};
-  $pachube->_request(method => 'DELETE', url => $url);
-}
-
-1;
-__END__
-
-=head2 EXPORT
-
-None by default.
-
 =head1 SEE ALSO
 
 Pachube web site: http://www.pachube.com/
 
 =head1 AUTHOR
 
-Mark Hindess, E<lt>soft-pachube@temporalanomaly.comE<gt>
+Mark Hindess <soft-pachube@temporalanomaly.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2009 by Mark Hindess
+This software is copyright (c) 2010 by Mark Hindess.
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.10.0 or,
-at your option, any later version of Perl 5 you may have available.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =cut
+
+
+__END__
+
